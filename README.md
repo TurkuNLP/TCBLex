@@ -4,6 +4,8 @@
 
 This repository contains scripts that were used in building TCBLex from a corpus of CoNLLU -files as well as a Python Notebook that can be used to view statistical data from TCBLex.
 
+To see the pipeline that was used to build the corpus TCBLex is based on, please view the reporistory for the [Turku Children's Book Corpus pipeline](https://github.com/TurkuNLP/TCBC-pipeline)
+
 ## Interpreting TCBLex
 
 TCBLex is released as a collection of CSV-files, where the character ";" is used as a separator.
