@@ -15,6 +15,7 @@ The lexical database is split into four different folders:
   - groups_csv, which contains sublexicons for each age group
   - registers_csv, which contains sublexicons for each register
   - whole_csv, which contains the whole lexicon
+
 Each CSV-file has the same exact columns in the same order. For more details on how each of the statistics is calculated, please refer to the paper.
   - text (Word type)
   - lemma (Lemma of the word type)
