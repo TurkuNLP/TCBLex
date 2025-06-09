@@ -42,6 +42,11 @@ Each CSV-file has the same exact columns in the same order. For more details on 
   - Word FSA (Intended reading age word type is first encountered at)
   - Lemma FSA (Intended reading age lemma is first encountered at)
 
+### Alternative version of TCBLex
+For the versions with features, the "upos" and "Word-POS F" are replaced with "upos+features" and "Word-POS+FEATS F" respectively.
+
+These versions include extra information on word types, such as what is the case or tense of the word. These features also follow the Universal Dependencies framework. For more information, see [the webpage for Finnish UD](https://universaldependencies.org/fi/index.html).
+
 ## Viewing statistical data of TCBLex
 
 To use Python Notebook provided in this repository, you must first download TCBLex and place the "Data" folder in the same folder as the notbook. After this, you can utilize the functions and examples provided in the notebook to display the same plots seen in the article or get the same statistical data as presented in the tables of the article. The code in the notebook has been commented to make viewing and using it easier.
