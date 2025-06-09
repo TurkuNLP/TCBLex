@@ -547,9 +547,9 @@ def conseqChars(x: str):
     else:
         return True
     
-def cleanWordBeginnings(books: dict) -> dict:
+def cleanWords(books: dict) -> dict:
     """
-    Function for cleaning non-alnum characters from the beginning of words in sentence data
+    Function for cleaning non-alnum characters from the beginning and ending of words and lemmas in sentence data
     :param books: dict of the sentence data of books
     :return: dictionary, where the dataframes have been cleaned
     """
@@ -558,6 +558,9 @@ def cleanWordBeginnings(books: dict) -> dict:
     for key in books:
         df = books[key].copy()
         df['text'] = df['text'].apply(lambda x: delNonAlnumStart(str(x)))
+        df['lemma'] = df['lemma'].apply(lambda x: delNonAlnumStart(str(x)))
+        df['text'] = df['text'].apply(lambda x: delNonAlnumEnd(str(x)))
+        df['lemma'] = df['lemma'].apply(lambda x: delNonAlnumEnd(str(x)))
         clean[key] = df.dropna()
     return clean
 
@@ -575,6 +578,21 @@ def delNonAlnumStart(x: str) -> str:
                 break
         return x[ind:]
     return x    
+
+def delNonAlnumEnd(x: str) -> str:
+    '''
+    Function for deleting non-alnum sequences of words from Conllu-files
+    :param x: string that is at least 2 characters long
+    :return: the same string, but with non-alnum characters removed from the start until the first alnum-character
+    '''
+    if not x[-1].isalnum() and len(x)>1:
+        ind = 0
+        for i in range(1,len(x)):
+            if x[-i].isalnum():
+                ind=-i
+                break
+        return x[:ind+1]
+    return x 
 
 def ignoreOtherAlphabets(sentences: dict) -> dict:
     """
@@ -1181,9 +1199,9 @@ def formatDataForPaperOutputBasic(corpus: dict[str,pd.DataFrame]):
     over_15 = []
     for i in ages:
         if i<15:
-            sub_corpora.append(cleanWordBeginnings(getDistinctSubCorp(corpus, i)))
+            sub_corpora.append(cleanWords(getDistinctSubCorp(corpus, i)))
         else:
-            over_15.append(cleanWordBeginnings(getDistinctSubCorp(corpus, i)))
+            over_15.append(cleanWords(getDistinctSubCorp(corpus, i)))
     #Sort the aged 15 and over sub-corpora from lowest age to highest
     over_15.sort(key=lambda x:int(findAgeFromID(list(x.keys())[0])))
     #Combine 15+ aged books into one sub-corpus
@@ -1256,9 +1274,9 @@ def formatDataForPaperOutputWithFeats(corpus: dict[str,pd.DataFrame]):
     over_15 = []
     for i in ages:
         if i<15:
-            sub_corpora.append(cleanWordBeginnings(getDistinctSubCorp(corpus, i)))
+            sub_corpora.append(cleanWords(getDistinctSubCorp(corpus, i)))
         else:
-            over_15.append(cleanWordBeginnings(getDistinctSubCorp(corpus, i)))
+            over_15.append(cleanWords(getDistinctSubCorp(corpus, i)))
     #Sort the aged 15 and over sub-corpora from lowest age to highest
     over_15.sort(key=lambda x:int(findAgeFromID(list(x.keys())[0])))
     #Combine 15+ aged books into one sub-corpus
@@ -1318,7 +1336,7 @@ def writePaperOutputXlsx(ready_dfs: dict[str:pd.DataFrame], name: str):
     """
     with pd.ExcelWriter("Data/TCBLex_data_output_"+name+".xlsx") as writer:
         for df in ready_dfs:
-            ready_dfs[df].sort_values('Word CD', ascending=False).to_excel(writer, sheet_name=df, index=False)
+            ready_dfs[df].to_excel(writer, sheet_name=df, index=False)
             print(df+" done!")
 
 def writePaperOutputCsv(ready_dfs: dict[str:pd.DataFrame], name: str):
@@ -1331,5 +1349,5 @@ def writePaperOutputCsv(ready_dfs: dict[str:pd.DataFrame], name: str):
         os.mkdir(path)
     for df in ready_dfs:
         name = path+"/"+str(df)+".csv"
-        ready_dfs[df].sort_values('Word CD', ascending=False).to_csv(name, index=False, sep=';')
+        ready_dfs[df].to_csv(name, index=False, sep=';')
         print(df+" done!")
