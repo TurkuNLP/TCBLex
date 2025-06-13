@@ -1053,7 +1053,7 @@ def getStatisticsForDatabaseOnlyPos(sub_corpora, word_age_appearances=None, lemm
         filtered_data['Lemma Zipf'] = [lemma_zipfs[x] for x in filtered_data['lemma'].to_numpy(dtype='str')]
         #Add taivutusperhe size
         tv_sizes = getTaivutusperheSize(sub_corp)
-        filtered_data['Lemma IFS'] = [tv_sizes[x] for x in filtered_data['lemma'].to_numpy(dtype='str')]
+        filtered_data['Lemma MPS'] = [tv_sizes[x] for x in filtered_data['lemma'].to_numpy(dtype='str')]
         #Add syllables per word
         syllable_amount = getSyllableAmountsForWords(filtered_data['text'])
         filtered_data['Word Syllables'] = [syllable_amount[x] for x in filtered_data['text'].to_numpy(dtype='str')]
@@ -1151,7 +1151,7 @@ def getStatisticsForDatabasePosFeats(sub_corpora, word_age_appearances=None, lem
         filtered_data['Lemma Zipf'] = [lemma_zipfs[x] for x in filtered_data['lemma'].to_numpy(dtype='str')]
         #Add taivutusperhe size
         tv_sizes = getTaivutusperheSize(sub_corp)
-        filtered_data['Lemma IFS'] = [tv_sizes[x] for x in filtered_data['lemma'].to_numpy(dtype='str')]
+        filtered_data['Lemma MPS'] = [tv_sizes[x] for x in filtered_data['lemma'].to_numpy(dtype='str')]
         #Add syllables per word
         syllable_amount = getSyllableAmountsForWords(filtered_data['text'])
         filtered_data['Word Syllables'] = [syllable_amount[x] for x in filtered_data['text'].to_numpy(dtype='str')]
