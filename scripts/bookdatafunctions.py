@@ -12,6 +12,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 import logging
 import itertools
 import string
+from collections import Counter
+import random
 
 #CONSTANTS
 
@@ -656,7 +658,7 @@ def dfToLowercase(df):
 
 def getNumOfSentences(corpus: dict) -> dict:
     """
-    Function for returning the amount ot sentences for each book in the corpus
+    Function for returning the amount of main clauses for each book in the corpus
     :param corpus: Dict with form [id, pd.DataFrame]. where df has sentence data
     :return:dict of form [id, int]
     """
@@ -781,6 +783,31 @@ def getMultiVerbConstrNumPerSentence(corpus: dict) -> dict:
         modal_verb_num = len(book[((book['upos'] == 'AUX') & (book['xpos'] == 'V') & (book['deprel'] == 'aux')) | ((book['upos'] == 'VERB') & (book['deprel'] == 'xcomp'))])
         multiverb_sentences_ratio[id] = modal_verb_num/sentences_sizes[id]
     return multiverb_sentences_ratio
+
+def getPreposingAdverbialClauses(corpus: dict[str,pd.DataFrame]) -> dict:
+    """
+    Function for calculating the number of preposing adverbial clauses in a conllu file
+    """
+    returnable = {}
+    for key in corpus:
+        df = corpus[key]
+        df['head'] = df['head'].apply(lambda x: int(x))
+        df['id'] = df['id'].apply(lambda x: int(x))
+        prep_advcl = 0
+        advcl_id = 1000
+        root_id = 1000
+        for i in range(len(df)):
+            if df.loc[i]['id'] == 1:
+                advcl_id = 1000
+                root_id = 1000
+            if df.loc[i]['deprel'] == 'root':
+                root_id = i
+            if df.loc[i]['deprel'] == 'advcl':
+                advcl_id = i
+                if advcl_id < root_id:
+                    prep_advcl += 1
+        returnable[key] = prep_advcl
+    return returnable
 
 def getDictAverage(corp_data: dict) -> float:
     """
@@ -928,20 +955,319 @@ def scaleCorpusData(corpus_data: dict[str,float], scaling_data: dict[str,float])
         returnable[key] = corpus_data[key]/scaling_data[key]
     return returnable
 
-def getPosNGramForCorpus(corpus: dict[str,pd.DataFrame], n: int) -> dict[str, pd.Series]:
+def getPosNGramForCorpus(corpus: dict[str,pd.DataFrame], n: int) -> dict[str, Counter]:
     """
-    Function for getting wanted length POS n-gram for each book in corpus
+    Function for getting the number of wanted length POS n-grams for each book in corpus
     """
-
     returnable = {}
     for key in corpus:
         df = corpus[key]['upos']
-        n_grams = {}
+        n_grams = []
         for i in range(len(df)-(n-1)):
-            n_grams[i] = df.iloc[i:i+n].to_numpy(str)
-        for i in range(len(df)-(n-1), len(df)):
-            n_grams[i] = ""
-        returnable[key] = pd.Series(n_grams)
+            n_grams += [list(df.iloc[i:i+n].to_numpy(str))]
+        n_grams = map(tuple, n_grams)
+        returnable[key] = Counter(n_grams)
+    return returnable
+
+def getFleschKincaidGradeLevel(corpus: dict):
+    returnable = {}
+    ASL = getAvgSentenceLens(corpus)
+    for id in corpus:
+        df = corpus[id]
+        ASW = np.mean(pd.Series(data=df['text'].apply(countSyllablesFinnish).to_numpy(), index=df['text'].to_numpy(dtype='str')).to_numpy(na_value=0))
+        returnable[id] = 0.39*ASL[id] + 11.8*ASW - 15.59
+    
+    return returnable
+
+def getModifiedSmogIndexForFinnish(conllu: pd.DataFrame, id_tree: dict[int, dict[int, list[int]]]):
+    """
+    Calculate the SMOG (Simple Measure of Gobbledygook) index for a conllu-file.
+    Using the version modified for Finnish as presented by Geoff Taylor (https://doi.org/10.1016/j.ssci.2012.01.016)
+    It can only be calculated for texts that are at least 30 sentences long, so if the number of sentences is lower, we return 0.
+    """
+    #The modification is to increase the number of syllables from 3 in the original SMOG index to 5 for Finnish
+    poly_syllable_cutoff = 5
+
+    if len(id_tree) < 31:
+        return 0
+    
+    smog_sentences = []
+    sentences_to_pick_from = list(id_tree.keys())
+    cutoff = math.floor((len(sentences_to_pick_from)/3))
+    #Randomly sample 10 sentences from the beginning, middle, and end of the text
+    for i in range(3):
+        start_index = random.randint(0,cutoff-10)
+        smog_sentences += sentences_to_pick_from[start_index:start_index+10]
+        sentences_to_pick_from = sentences_to_pick_from[cutoff:]
+    #Count number of polysyllable words in the sampled sentences
+    num_of_polysyllables = 0
+    for sentence_head in smog_sentences:
+        tree = id_tree[sentence_head]
+        for leaf in tree:
+            if countSyllablesFinnish(conllu['text'].iloc[leaf]) > poly_syllable_cutoff-1:
+                num_of_polysyllables += 1
+    #Return SMOG index formula result
+    return 1.0430*np.sqrt(num_of_polysyllables)+3.1291
+
+#Coleman-Liau index
+def getColemanLiauIndex(conllu: pd.DataFrame, id_tree: dict[int, dict[int, list[int]]]):
+    num_of_words = len(conllu)
+    num_of_sentences = len(id_tree)
+    num_of_letters = np.sum(list(map(len, conllu['text'].to_numpy(str))))
+    return 0.0588 * (num_of_letters / num_of_words) * 100 - 0.296 * (num_of_sentences / num_of_words) * 100 - 15.8
+
+#Automated readability index
+def getARI(conllu: pd.DataFrame, id_tree: dict[int, dict[int, list[int]]]):
+    num_of_words = len(conllu)
+    num_of_sentences = len(id_tree)
+    num_of_letters = np.sum(list(map(len, conllu['text'].to_numpy(str))))
+    return 4.71 * (num_of_letters / num_of_words) + 0.5 * (num_of_words / num_of_sentences) - 21.43
+
+def buildIdTreeFromConllu(conllu: pd.DataFrame) -> dict[int,list[int]]:
+    """
+    Build a tree for each sentence in a conllu file, where each node points to the corresponding DataFrame row of a line in the conllu-file
+    """
+    #conllu['id'] = conllu['id'].apply(lambda x: int(x))
+    id_tree = {}
+    #First fetch ids marking boundaries for each sentence
+    sentence_ids = []
+    start = 0
+    for i in range(1,len(conllu)):
+        if conllu.loc[i]['id'] == '1':
+            sentence_ids.append((start,i-1))
+            start = i
+    sentence_ids.append((start, len(conllu)-1))
+    #Build tress for each sentence
+    for sentence in sentence_ids:
+        root = 0
+        sent_locs = range(sentence[0],sentence[1]+1)
+        heads = conllu.loc[sentence[0]:sentence[1]]['head'].to_numpy(int)-1
+        sent_tree = {x:[] for x in sent_locs}
+        for j in range(len(heads)):
+            if heads[j] == -1:
+                root = sent_locs[j]
+            else:
+                children = sent_tree[sent_locs[heads[j]]]
+                children.append(sent_locs[j])
+                sent_tree[sent_locs[heads[j]]] = children
+        id_tree[root] = sent_tree
+    return id_tree
+
+def getDepthOfTree(head:int, tree: dict[int,list[int]], depth=0) -> int:
+    """
+    Get syntactic tree depth recursively
+    """
+    next = depth+1
+    children = tree[head]
+    if len(children) > 0:
+        for child in children:
+            depth = max(depth, getDepthOfTree(child, tree, next))
+    return depth
+
+
+def getMeanSyntacticTreeDepth(tree):
+    """
+    Get the average (mean) depth of the syntactic tree of a conllu-file
+    """
+    depths = []
+    for head in tree:
+        depths.append(getDepthOfTree(head, tree[head]))
+    return np.mean(depths)
+
+def getMaxSyntacticTreeDepth(tree):
+    """
+    Get the average (mean) depth of the syntactic tree of a conllu-file
+    """
+    depths = []
+    for head in tree:
+        depths.append(getDepthOfTree(head, tree[head]))
+    return max(depths)
+
+def getIdTreeNGram(tree, prev_round=[]):
+    """
+    Recursively add layers to the n-grams.
+    Returns a list of lists, which consist of ids. Amount per list is the specified n.
+    """
+    current_round = []
+    for gram in prev_round:
+        if len(tree[gram[-1]]) > 0:
+            for leaf in tree[gram[-1]]:
+                current_round.append(gram+[leaf])
+    return current_round
+
+def getSyntacticTreeNGram(conllu: pd.DataFrame, id_tree: dict[int, dict[int, list[int]]], n: int, feature_column: str):
+    """
+    Function for getting n-grams from a conllu-file of the wanted feature (UD output) column
+    Most often you will have either 'deprel' for dependency relations or 'upos' for POS tags
+    Expects you to have built the id-tree beforehand using buildIdTreeFromConllu()
+    Returns the n-grams as a dictionary of tuple-count pairs
+    """
+    feat_col = conllu[feature_column]
+    all_id_grams = []
+    for root in id_tree:
+        tree = id_tree[root]
+        init_grams = [[x] for x in list(tree.keys())]
+        for i in range(1, n):
+            init_grams = getIdTreeNGram(tree, init_grams)
+        all_id_grams += init_grams
+    all_n_grams = map(tuple, [[feat_col[y] for y in x] for x in all_id_grams])
+    return Counter(all_n_grams)
+
+def findNestingSubclauses(conllu: pd.DataFrame, id_tree: dict[int, dict[int, list[int]]]):
+    """
+    Finds the subordinate clauses that have nesting clauses (clause within a clause)
+    Only looks to find at least one nesting clause and return a list of dicts with the following keys:
+    sentence_head:id of sentence head, clause_head:id of clause with nesting clauses, clause_type:deprel type of head 
+    """
+    deprel_conllu = conllu['deprel']
+    clauses = ['csubj', 'ccomp', 'xcomp', 'advcl', 'acl', 'acl:relcl', 'xcomp:ds']
+    nesting_clauses = []
+    #Check children of sentence heads
+    for head in id_tree:
+        tree = id_tree[head]
+        head_children = tree[head]
+        for child in head_children:
+            child_deprel = deprel_conllu.iloc[child]
+            #If children deprel is a clause
+            if child_deprel in clauses:
+                #Check all grandchildren of the child that is a clause
+                for grandchild in tree[child]:
+                    grandchild_deprel = deprel_conllu.iloc[grandchild]
+                    #If a nesting clause is found, append child's data to list and move to the next child
+                    if grandchild_deprel in clauses:
+                        nesting_clauses.append({'sentence_head':head, 'clause_head':child, 'clause_type':child_deprel})
+                        break
+                
+    return nesting_clauses
+
+def findStackingClauses(conllu: pd.DataFrame, id_tree: dict[int, dict[int, list[int]]]):
+    """
+    Finds the subordinate clauses that have stacking clauses (coordinating clause within subordinating clause)
+    Only looks to find at least one stacking clause and return a list of dicts with the following keys:
+    sentence_head:id of sentence head, clause_head:id of clause with stacking clauses, clause_type:deprel type of head 
+    """
+    deprel_conllu = conllu['deprel']
+    clauses = ['csubj', 'ccomp', 'xcomp', 'advcl', 'acl', 'acl:relcl', 'xcomp:ds']
+    coordinating = 'conj'
+    stacking_clauses = []
+    #Check children of sentence heads
+    for head in id_tree:
+        tree = id_tree[head]
+        head_children = tree[head]
+        for child in head_children:
+            child_deprel = deprel_conllu.iloc[child]
+            #If children deprel is a clause
+            if child_deprel in clauses:
+                #Check all grandchildren of the child that is a clause
+                for grandchild in tree[child]:
+                    grandchild_deprel = deprel_conllu.iloc[grandchild]
+                    #If a stacking clause is found, append child's data to list and move to the next child
+                    if grandchild_deprel == coordinating:
+                        stacking_clauses.append({'sentence_head':head, 'clause_head':child, 'clause_type':child_deprel})
+                        break
+    
+    return stacking_clauses
+                
+
+def getNonClausalChildrenAmount(deprel_conllu: pd.Series, tree: dict[int, list[int]], head):
+    clauses = ['csubj', 'ccomp', 'xcomp', 'advcl', 'acl', 'acl:relcl', 'xcomp:ds']
+    leaves = tree[head]
+    non_clausal = [head]
+    #While there are leaves yet to be explored
+    while len(leaves) > 0:
+        #Pop first member and select it
+        leaf = leaves.pop(0)
+        #If leaf starts a new clause, move on
+        if deprel_conllu.iloc[leaf] in clauses:
+            continue
+        #If leaf did not start a new clause, add it to non_clausal
+        non_clausal.append(leaf)
+        #Get the children of leaf and if there are any, append them to the list of leaves to explore
+        children = tree[leaf]
+        if len(children) > 0:
+            leaves += children
+    #return the amount of non_clausal members of the clause explored
+    return len(non_clausal)
+
+def findMeanLengthOfClause(conllu: pd.DataFrame, id_tree: dict[int, dict[int, list[int]]]):
+    """
+    Function that finds the mean length of clauses in a given conllu-snippet.
+    Calculated by traversing the syntactic tree and seeing how many children start new clauses and how many belong to the head (obviosuly also including grandchildren etc.)
+    """
+    deprel_conllu = conllu['deprel']
+    clauses = ['csubj', 'ccomp', 'xcomp', 'advcl', 'acl', 'acl:relcl', 'xcomp:ds', 'root']
+    clause_lengths = []
+    for head in id_tree:
+        tree = id_tree[head]
+        clausal_heads = []
+        for i in tree:
+            if deprel_conllu.iloc[i] in clauses:
+                clausal_heads.append(i)
+        #clausal_heads = [i for i in tree if deprel_conllu.iloc[i] in clauses]
+        for ch in clausal_heads:
+            clause_lengths.append(getNonClausalChildrenAmount(deprel_conllu, tree, ch))
+    return np.mean(clause_lengths)
+
+def getPOSVariation(conllu: pd.DataFrame, pos: str):
+    """
+    Function for getting the variation of words belonging to a sepcific POS category.
+    Measures the ratio between unique words and all words, but in specific POS categories.
+    """
+    all_pos_tags_present = conllu['upos'].drop_duplicates().to_numpy(str)
+    if pos not in all_pos_tags_present:
+        return 0
+    all_specific_pos = conllu[conllu['upos'] == pos]
+    reduced_df = all_specific_pos[['text','upos']]
+    uniq_words = reduced_df['text'].apply(lambda x: str(x).lower()).drop_duplicates()
+    return len(uniq_words) / len(all_specific_pos)
+
+def getCorrectedPOSVariation(conllu: pd.DataFrame, pos: str):
+    """
+    Same as POS variation, except we divide the amount of unique words by a 'corrected' term, rather than the raw number of words.
+    The corrected term is equal to sqrt(2 * total number of words with specified POS tag)
+    """
+    all_pos_tags_present = conllu['upos'].drop_duplicates().to_numpy(str)
+    if pos not in all_pos_tags_present:
+        return 0
+    all_specific_pos = conllu[conllu['upos'] == pos]
+    reduced_df = all_specific_pos[['text','upos']]
+    uniq_words = reduced_df['text'].apply(lambda x: str(x).lower()).drop_duplicates()
+    return len(uniq_words) / np.sqrt(2*len(all_specific_pos))
+
+def getRatioOfFunctionWords(conllu: pd.DataFrame):
+    """
+    Function for calculating the ratio between function words and content words.
+    Essentially means dividing the number of function words (all other POS tags) by the number of content words (NOUN, PROPN, ADJ, NUM, and VERB)
+    """
+    num_of_content_words = len(conllu[(conllu['upos'] == 'NOUN') | (conllu['upos'] == 'PROPN') | (conllu['upos'] == 'ADJ') | (conllu['upos'] == 'NUM') | (conllu['upos'] == 'VERB')])
+    #Don't divide by 0...
+    if num_of_content_words == 0:
+        return 1.0
+    return (len(conllu)-num_of_content_words)/num_of_content_words
+
+def getPreposingAdverbialClauses(corpus: dict[str,pd.DataFrame]) -> dict:
+    """
+    Function for calculating the number of preposing adverbial clauses in a conllu file
+    """
+    returnable = {}
+    for key in corpus:
+        df = corpus[key]
+        #df['head'] = df['head'].apply(lambda x: int(x))
+        #df['id'] = df['id'].apply(lambda x: int(x))
+        prep_advcl = 0
+        advcl_id = 1000
+        root_id = 1000
+        for i in range(len(df)):
+            if df.loc[i]['id'] == '1':
+                advcl_id = 1000
+                root_id = 1000
+            if df.loc[i]['deprel'] == 'root':
+                root_id = i
+            if df.loc[i]['deprel'] == 'advcl':
+                advcl_id = i
+                if advcl_id < root_id:
+                    prep_advcl += 1
+        returnable[key] = prep_advcl
     return returnable
 
 def countSyllablesFinnish(word: str) -> int:
@@ -979,15 +1305,24 @@ def countSyllablesFinnish(word: str) -> int:
                 #If special diftong that counts as a syllable after the first syllable
                 if i!=0 and bigram in SYLL_SET_3:
                     syll_count += 1
+    elif len(word) == 0:
+        return 0
     #If comprises of only one character and not punct/sym/num
     elif not word[0] in string.punctuation and not word[0].isnumeric():
         syll_count += 1
     return syll_count
 
-def getSyllableAmountsForWords(words: pd.Series) -> None:
+def getSyllableAmountsForWords(words: pd.Series) -> pd.Series:
     "Helper function to apply syllable counting to all words"
     uniq_words = words.drop_duplicates()
     return pd.Series(data=uniq_words.apply(countSyllablesFinnish).to_numpy(), index=uniq_words.to_numpy(dtype='str'))
+
+def getAverageSyllablesPerSentence(conllu: pd.DataFrame, id_tree: dict[int, dict[int, list[int]]]):
+    """
+    Calculate the average amount of syllables per sentence (total number of syllables / number of sentences)
+    """
+    syllables = np.sum([countSyllablesFinnish(x) for x in conllu['text'].to_numpy(str)])
+    return syllables / len(id_tree)
 
 def getStatisticsForDatabaseOnlyPos(sub_corpora, word_age_appearances=None, lemma_age_appearances=None):
     #If wfsa or lfsa included
