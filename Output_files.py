@@ -4,16 +4,14 @@ import warnings
 warnings.filterwarnings('ignore')
 
 #Constants
-CONLLU_PATH = "Conllus" #Provide the folder where your CoNLLU files are located
-ISBN2AGE_PATH = "ISBN_MAPS/ISBN2AGE.xlsx" #Provide the direct path of the file containing a mapping from ISBNs to intended reading ages
-
-
+CONLLU_PATH = "Conllus_v-1-0" #Provide the folder where your CoNLLU files are located
+OUTPUT_DIR = 'Data_v1-0' #Provide the folder where the created lexical database should be stored
 #Initialize corpus from CoNLLU files
-corpus = bdf.mapGroup2Age(bdf.cleanWords(bdf.initBooksFromConllus(CONLLU_PATH)), ISBN2AGE_PATH)      
+corpus = bdf.cleanWords(bdf.initBooksFromConllus(CONLLU_PATH))    
 
 #Use the monster function (see scripts/bookdatafunctions.py) to get correctly formatted DataFrames and output to Data folder
-bdf.formatDataForPaperOutputBasic(corpus)
+bdf.formatDataForPaperOutputBasic(corpus, OUTPUT_DIR)
 print("Basic set done!")
-bdf.formatDataForPaperOutputWithFeats(corpus)
+bdf.formatDataForPaperOutputWithFeats(corpus, OUTPUT_DIR)
 
 print("All done!")

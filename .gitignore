@@ -1,7 +1,9 @@
-Conllus/
+Conllus*/
 ISBN_MAPS/
 .~lock.*
 Data/
+Data_*/
 *.zip
 *.txt
 *.conllu
+*.tar.gz
