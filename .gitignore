@@ -7,3 +7,5 @@ Data_*/
 *.txt
 *.conllu
 *.tar.gz
+Keywords*
+*.pyc

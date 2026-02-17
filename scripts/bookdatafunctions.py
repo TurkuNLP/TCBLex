@@ -226,7 +226,8 @@ def formatDataForPaperOutputBasic(corpus: dict[str,pd.DataFrame], output_dir: st
     #Sort the aged 15 and over sub-corpora from lowest age to highest
     over_15.sort(key=lambda x:int(Structure.findAgeFromID(list(x.keys())[0])))
     #Combine 15+ aged books into one sub-corpus
-    sub_corpora.append(Structure.combineSubCorpDicts(over_15))
+    if len(over_15) > 0:
+        sub_corpora.append(Structure.combineSubCorpDicts(over_15))
     #Sort the sub-corpora from lowest age to highest
     sub_corpora.sort(key=lambda x:int(Structure.findAgeFromID(list(x.keys())[0])))
     #Keep track of when words and lemmas first appear in terms of intended reading age
